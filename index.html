@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Авиакалькулятор</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background-color: #f4f4f9; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; }
+        label { display: block; margin-top: 15px; font-weight: bold; color: #555; }
+        input, select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; margin-top: 25px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        button:hover { background-color: #0056b3; }
+        .result { margin-top: 25px; padding: 20px; background-color: #e8f5e9; border-radius: 8px; display: none; }
+        .result p { margin: 8px 0; font-size: 16px; }
+        .profit { font-weight: bold; color: #2e7d32; font-size: 18px; }
+        .hidden { display: none; }
+        .link { text-align: center; margin-top: 15px; color: #007bff; cursor: pointer; text-decoration: underline; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .logout-btn { width: auto; padding: 8px 15px; margin: 0; background-color: #dc3545; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div id="auth-card" class="card">
+        <h2 id="auth-title">Вход в систему</h2>
+        <label for="username">Имя пользователя:</label>
+        <input type="text" id="username" placeholder="Введите имя">
+        <label for="password">Пароль:</label>
+        <input type="password" id="password" placeholder="Введите пароль">
+        <button onclick="handleAuth()" id="auth-btn">Войти</button>
+        <div class="link" onclick="toggleAuthMode()" id="auth-toggle">Нет аккаунта? Зарегистрироваться</div>
+    </div>
+
+    <div id="app-card" class="card hidden">
+        <div class="header">
+            <h2 style="margin: 0;">Расчет спроса и прибыли</h2>
+            <button class="logout-btn" onclick="logout()">Выйти</button>
+        </div>
+        
+        <label for="route">Маршрут:</label>
+        <select id="route">
+            <option value="MOW-AER">Москва - Сочи (MOW-AER)</option>
+            <option value="MOW-LED">Москва - Петербург (MOW-LED)</option>
+            <option value="MOW-KGD">Москва - Калининград (MOW-KGD)</option>
+            <option value="MOW-OVB">Москва - Новосибирск (MOW-OVB)</option>
+            <option value="MOW-MRV">Москва - Минеральные Воды (MOW-MRV)</option>
+        </select>
+
+        <label for="date">Дата вылета:</label>
+        <input type="date" id="date" value="2026-06-15">
+
+        <label for="price">Цена билета (руб):</label>
+        <input type="number" id="price" placeholder="Например, 9000" value="9000">
+
+        <button onclick="calculate()">Рассчитать</button>
+
+        <div id="output" class="result">
+            <p>Спрос по прогнозу: <span id="res-demand"></span></p>
+            <p>Мест в самолете: <span id="res-seats"></span></p>
+            <p>Продано билетов: <span id="res-sold"></span></p>
+            <p class="profit">Прибыль: <span id="res-profit"></span> руб</p>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <div class="chart-container" style="margin-top: 30px; display: none;">
+            <canvas id="demandChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let isLogin = true;
+        let myChart = null;
+
+        function toggleAuthMode() {
+            isLogin = !isLogin;
+            document.getElementById('auth-title').innerText = isLogin ? 'Вход в систему' : 'Регистрация';
+            document.getElementById('auth-btn').innerText = isLogin ? 'Войти' : 'Зарегистрироваться';
+            document.getElementById('auth-toggle').innerText = isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти';
+        }
+
+        async function handleAuth() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const endpoint = isLogin ? 'login' : 'register';
+
+            try {
+                const response = await fetch(`http://127.0.0.1:8000/${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Ошибка');
+                }
+
+                if (isLogin) {
+                    const data = await response.json();
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('username', data.username);
+                    showApp();
+                } else {
+                    alert('Регистрация успешна! Теперь войдите.');
+                    toggleAuthMode();
+                }
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        function showApp() {
+            document.getElementById('auth-card').classList.add('hidden');
+            document.getElementById('app-card').classList.remove('hidden');
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            document.getElementById('app-card').classList.add('hidden');
+            document.getElementById('auth-card').classList.remove('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        }
+
+        window.onload = function() {
+            if (localStorage.getItem('token')) {
+                showApp();
+            }
+        }
+
+    async function calculate() {
+        const route = document.getElementById('route').value;
+        const date = document.getElementById('date').value;
+        const price = parseFloat(document.getElementById('price').value);
+        const token = localStorage.getItem('token');
+
+        try {
+            const response = await fetch('http://127.0.0.1:8000/predict', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({ route, date, price })
+            });
+
+            if (!response.ok) {
+                let errText = 'Статус ' + response.status;
+                try {
+                    const errJson = await response.json();
+                    errText = errJson.detail || errText;
+                } catch {
+                    // если не удалось распарсить JSON, оставляем статус
+                }
+                throw new Error(errText);
+            }
+
+            const data = await response.json();
+
+            document.getElementById('res-demand').innerText = Math.round(data.calculated_demand);
+            document.getElementById('res-seats').innerText = data.seats;
+            document.getElementById('res-sold').innerText = Math.round(data.sold_tickets);
+            document.getElementById('res-profit').innerText = Math.round(data.profit).toLocaleString();
+            document.getElementById('output').style.display = 'block';
+
+            document.querySelector('.chart-container').style.display = 'block';
+            drawChart(data.quantiles.labels, data.quantiles.data, data.seats);
+
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+        function drawChart(labels, dataPoints, seats) {
+            const ctx = document.getElementById('demandChart').getContext('2d');
+            if (myChart) myChart.destroy();
+
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Прогноз продаж (квантили)',
+                        data: dataPoints,
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0, 123, 255, 0.2)',
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#007bff',
+                        pointRadius: 5
+                    },
+                    {
+                        label: 'Вместимость самолета',
+                        data: Array(labels.length).fill(seats),
+                        borderColor: '#dc3545',
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: { display: true, text: 'Распределение вероятного спроса' },
+                        legend: { position: 'bottom' }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: 'Количество билетов' } }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
