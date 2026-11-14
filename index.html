@@ -151,7 +151,6 @@
                     const errJson = await response.json();
                     errText = errJson.detail || errText;
                 } catch {
-                    // если не удалось распарсить JSON, оставляем статус
                 }
                 throw new Error(errText);
             }
